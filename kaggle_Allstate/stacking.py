@@ -38,8 +38,6 @@ def main():
     xgb_rounds = []
 
     start_time = timer(None)
-    global train
-    global target
     # Load data set and target values
     train, target, test, _, ids = load_data()
 
