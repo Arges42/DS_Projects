@@ -8,7 +8,8 @@ import xgboost as xgb
 from xgboost.sklearn import XGBClassifier
 from sklearn.svm import SVR
 from sklearn.ensemble import AdaBoostRegressor,ExtraTreesRegressor,RandomForestRegressor
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LinearRegression, BayesianRidge
+from sklearn.neighbors import KNeighborsRegressor
 import numpy as np
 from datetime import datetime
 from os.path import join
@@ -41,7 +42,6 @@ def main():
     # Load data set and target values
     train, target, test, _, ids = load_data()
 
-    optimize()
 
     #XGBoost params
     params = {}
@@ -62,8 +62,12 @@ def main():
     #Level 0 clf
     clfs = [
             XGBClassifier(),
-            ExtraTreesRegressor(random_state=1001),
-            AdaBoostRegressor(random_state=1001) 
+            #RandomForestRegressor(random_state=1001,n_estimators=150,max_depth=5),
+            #ExtraTreesRegressor(random_state=1001,n_estimators),
+            #AdaBoostRegressor(random_state=1001,n_estimators=150),
+            #LinearRegression()
+            KNeighborsRegressor(n_neighbors=20),
+            BayesianRidge() 
           ]
 
     kf = KFold(train.shape[0], n_folds=folds)
@@ -92,7 +96,7 @@ def main():
                 d_test = xgb.DMatrix(test)
                 watchlist = [(d_train, 'train'), (d_valid, 'eval')]
                 clf = xgb.train(params,d_train,100000,watchlist,
-                    early_stopping_rounds=25,verbose_eval=50)
+                    early_stopping_rounds=25,verbose_eval=False)
 
             else:
                 clf.fit(X_train, Y_train)
@@ -106,30 +110,33 @@ def main():
                 blend_train[cv_index, j] = clf.predict(X_valid)
                 blend_test_j[:, i] = clf.predict(test)
 
+            cv_score = mean_absolute_error(np.exp(Y_valid), np.exp(blend_train[cv_index, j]))
+            print(' eval-MAE: %.6f' % cv_score)
+
         # Take the mean of the predictions of the cross validation set
         blend_test[:, j] = blend_test_j.mean(1)
 
     ####################### Blending #######################################
     pf = KFold(blend_train.shape[0], n_folds = pfolds)
-    bclf = RandomForestRegressor()
+    bclf = RandomForestRegressor(n_estimators=300,max_depth=7)
 
     for i, (train_index, cv_index) in enumerate(pf):
-        X_train = train[train_index]
+        X_train = blend_train[train_index]
         Y_train = target[train_index]
-        X_valid = train[cv_index]
+        X_valid = blend_train[cv_index]
         Y_valid = target[cv_index]
 
         bclf.fit(X_train, Y_train)
         Y_valid_prediction = bclf.predict(X_valid)
         cv_score = mean_absolute_error(np.exp(Y_valid), np.exp(Y_valid_prediction))
         print(' eval-MAE: %.6f' % cv_score)
-        Y_test_predict = np.exp(bclf.predict(blend_test))
+        Y_test_pred = np.exp(bclf.predict(blend_test))
 
         #  Add Predictions and Average Them
         if i > 0:
-            fpred = pred + y_pred
+            fpred = pred + Y_test_pred
         else:
-            fpred = y_pred
+            fpred = Y_test_pred
         pred = fpred
         cv_sum = cv_sum + cv_score
     
