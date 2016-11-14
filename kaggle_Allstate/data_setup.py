@@ -90,12 +90,14 @@ def load_data(path_train='data/train.csv', path_test='data/test.csv'):
     #train = x_train.as_matrix()
     #test = x_test.as_matrix()
 
-    train_labels = np.log(np.array(train_loader['loss']))
+
+    shift = 200
+    train_labels = np.log(np.array(train_loader['loss'])+shift)
     #train_labels = train_loader['loss']
     train_ids = train_loader['id'].values.astype(np.int32)
     test_ids = test_loader['id'].values.astype(np.int32)
     
-    return train, train_labels, test, train_ids, test_ids, features
+    return train, train_labels, test, train_ids, test_ids, features, shift
 
 
 def categorical_feature_processing(data):

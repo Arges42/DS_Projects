@@ -25,6 +25,19 @@ def timer(start_time=None):
         print(' Time taken: %i minutes and %s seconds.' %
               (tmin, round(tsec, 2)))
 
+def logregobj(preds, dtrain):
+    labels = dtrain.get_label()
+    con = 2
+    x =preds-labels
+    grad =con*x / (np.abs(x)+con)
+    hess =con**2 / (np.abs(x)+con)**2
+    return grad, hess 
+
+def evalerror(preds, dtrain):
+    labels = dtrain.get_label()
+    return 'mae', mean_absolute_error(np.exp(preds), np.exp(labels))
+
+
 def ceate_feature_map(features):
     outfile = open('xgb.fmap', 'w')
     i = 0
@@ -53,17 +66,17 @@ def main():
     # enter the number of folds from xgb.cv
     folds = 5
     cv_sum = 0
-    early_stopping = 25
+    early_stopping = 300
     fpred = []
     xgb_rounds = []
     use_cv = True  
 
     params = {}
     params['booster'] = 'gbtree'
-    params['objective'] = "reg:linear"
+    #params['objective'] = "reg:linear"
     #params['objective'] = "multi:softprob"
     #params['num_class'] = 15
-    params['eval_metric'] = 'mae'
+    #params['eval_metric'] = 'mae'
     params['eta'] = 0.1
     params['gamma'] = 0.5290
     params['min_child_weight'] = 4.2922
@@ -73,11 +86,24 @@ def main():
     params['max_delta_step'] = 0
     params['silent'] = 1
     params['random_state'] = 1001
-
+    '''
+    params = {
+        'min_child_weight': 1,
+        'eta': 0.001,
+        'colsample_bytree': 0.5,
+        'max_depth': 12,
+        'subsample': 0.8,
+        'alpha': 1,
+        'gamma': 1,
+        'silent': 1,
+        'verbose_eval': True,
+        'seed': 42
+    }
+    '''
     start_time = timer(None)
 
     # Load data set and target values
-    train, target, test, _, ids, features = load_data()
+    train, target, test, _, ids, features, shift = load_data()
     print(train.shape,test.shape)
     #target = pd.cut(target,bins=15,labels=False)
 
@@ -112,7 +138,9 @@ def main():
                             d_train,
                             100000,
                             watchlist,
-                            verbose_eval=10,
+                            verbose_eval=50,
+                            obj=logregobj, 
+                            feval=evalerror,
                             early_stopping_rounds=early_stopping)
 
         ####################################
@@ -121,9 +149,9 @@ def main():
 
             xgb_rounds.append(clf.best_iteration)
             scores_val = clf.predict(d_valid, ntree_limit=clf.best_ntree_limit)
-            cv_score = mean_absolute_error(np.exp(y_val), np.exp(scores_val))
+            cv_score = mean_absolute_error(np.exp(y_val)-shift, np.exp(scores_val)-shift)
             print(' eval-MAE: %.6f' % cv_score)
-            y_pred = np.exp(clf.predict(d_test, ntree_limit=clf.best_ntree_limit))
+            y_pred = np.exp(clf.predict(d_test, ntree_limit=clf.best_ntree_limit))-shift
 
         ####################################
         #  Add Predictions and Average Them
@@ -182,12 +210,12 @@ def main():
         sub_file = 'submission_5fold-average-xgb_' + str(score) + '_' + str(
             now.strftime("%Y-%m-%d-%H-%M")) + '.csv'
         print("\n Writing submission: %s" % sub_file)
-        result.to_csv(sub_file, index=True, index_label='id')
+        result.to_csv("submissions/"+sub_file, index=True, index_label='id')
     else:
         sub_file = 'submission_full-CV-xgb_' + str(now.strftime(
         "%Y-%m-%d-%H-%M")) + '.csv'
         print("\n Writing submission: %s" % sub_file)
-        result_fixed.to_csv(sub_file, index=True, index_label='id')
+        result_fixed.to_csv("submissions/"+sub_file, index=True, index_label='id')
 
 
 if __name__ == "__main__":
